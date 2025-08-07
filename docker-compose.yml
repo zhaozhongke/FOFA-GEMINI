@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  dashboard:
+    build: .
+    container_name: fofa_dashboard
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount the database file into the container to persist data
+      # and allow the scanner service to write to it.
+      - ./scans.db:/app/scans.db
+    env_file:
+      # Load environment variables from a .env file
+      - .env
+    restart: unless-stopped
+
+  scanner:
+    build: .
+    container_name: fofa_scanner
+    # Override the default command to run the scanner script instead of the web server
+    command: ["./run_scanner.sh"]
+    volumes:
+      # Also mount the database file so it can write the results
+      - ./scans.db:/app/scans.db
+    env_file:
+      - .env
+    # The scanner is intended to be run manually or on a cron schedule,
+    # so we don't set a restart policy.
