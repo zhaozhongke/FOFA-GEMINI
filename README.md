@@ -1,68 +1,123 @@
 # Production-Grade FOFA Gemini Key Scanner
 
-This script searches the FOFA search engine for publicly exposed Google Gemini API keys. It uses a modern, asynchronous architecture to validate found keys concurrently and efficiently.
-
-This tool is based on the principles outlined in the "Automated Reconnaissance and Defense of Gemini API Key Leakage" report, focusing on performance, resiliency, and maintainability.
+This project provides a suite of tools to find and validate publicly exposed Google Gemini API keys using the FOFA API. It is designed with production-readiness in mind, featuring a resilient, asynchronous scanner and a web dashboard for viewing historical results. The entire application is containerized with Docker for easy deployment and management.
 
 ## Features
 
-- **Asynchronous**: Uses `asyncio` and `httpx` for high-performance, non-blocking network I/O.
-- **Resilient**: Implements exponential backoff with the `backoff` library to handle API rate limits and transient network errors gracefully.
-- **Configurable**: All settings are managed in a `config.yaml` file, separating configuration from code.
-- **Structured Logging**: Outputs JSON-formatted logs for easy parsing and monitoring in a production environment.
-- **Producer-Consumer Model**: Efficiently fetches data from FOFA and validates keys in parallel using an `asyncio.Queue`.
+- **Asynchronous Scanner**: Uses `asyncio` and `httpx` for high-performance, non-blocking network I/O.
+- **Resilient**: Implements exponential backoff to handle API rate limits and transient network errors gracefully.
+- **Web Dashboard**: A Flask-based web interface to view the history of all scan results.
+- **Production Ready**:
+    - Runs the web app via a Gunicorn WSGI server.
+    - Containerized with Docker for consistent and portable deployments.
+    - Prioritizes environment variables for secure secret management.
+    - Includes a wrapper script for easy automation with `cron`.
+- **Configurable**: Non-sensitive settings are managed in a `config.yaml` file.
+- **Structured Logging**: Outputs JSON-formatted logs for easy parsing and monitoring.
 
 ## Prerequisites
 
-* Python 3.7+
-* A FOFA account with API credentials.
+*   Python 3.7+
+*   Docker
+*   A FOFA account with API credentials.
 
-## Installation
+## Project Structure
 
-1.  Clone this repository.
-2.  Install the required Python packages using `pip`:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-## Configuration
-
-1.  Rename `config.yaml.example` to `config.yaml` (or create a new `config.yaml`).
-2.  Open `config.yaml` and enter your FOFA email and API key:
-    ```yaml
-    fofa:
-      email: "your_fofa_email@example.com"
-      key: "your_fofa_api_key"
-      # You can also customize the query and other parameters here.
-      query: 'body="AIzaSy"'
-    ```
-    *Note: The placeholder credentials in `config.yaml` should be replaced before running the script.*
-
-## Usage
-
-### Running the Scanner
-
-To run the scanner, simply execute the `main.py` script:
-
-```bash
-python3 main.py
+```
+.
+├── Dockerfile              # Instructions to build the Docker image
+├── config.yaml             # Configuration for the scanner
+├── dashboard.py            # The Flask web dashboard application
+├── main.py                 # The main asynchronous scanner script
+├── requirements.txt        # Python dependencies
+├── run_scanner.sh          # Wrapper script for automated scanning
+├── templates/
+│   └── index.html          # HTML template for the web dashboard
+└── wsgi.py                 # WSGI entry point for Gunicorn
 ```
 
-The script will output structured logs to the console. At the end of the scan, it will save any found valid keys to `valid_keys.txt` and record the overall statistics in the `scans.db` database.
+## Local Development & Usage
 
-### Viewing the Dashboard
+### 1. Installation
 
-To view the history of scan results on a web interface:
+Clone the repository and install the required Python packages:
+```bash
+git clone <repository_url>
+cd <repository_name>
+pip install -r requirements.txt
+```
 
-1.  Make sure you have installed all the dependencies: `pip install -r requirements.txt`
-2.  Run the Flask web server:
-    ```bash
-    python3 dashboard.py
+### 2. Configuration
+
+Secrets (FOFA credentials) are managed via environment variables. Non-sensitive parameters are in `config.yaml`.
+
+Set your credentials as environment variables:
+```bash
+export FOFA_EMAIL="your_fofa_email@example.com"
+export FOFA_KEY="your_fofa_api_key"
+```
+Alternatively, you can edit `config.yaml`, but this is not recommended for production.
+
+### 3. Running the Scanner Manually
+
+You can run a one-off scan using the wrapper script:
+```bash
+./run_scanner.sh
+```
+This will run the scan and save the results to the `scans.db` SQLite database.
+
+### 4. Running the Web Dashboard Locally
+
+To run the dashboard with the Flask development server:
+```bash
+python3 dashboard.py
+```
+Then open your browser to `http://127.0.0.1:8080`.
+
+---
+
+## Production Deployment with Docker
+
+The recommended way to run this application in production is using the provided Dockerfile.
+
+### 1. Build the Docker Image
+
+From the project root directory, run the build command:
+```bash
+docker build -t fofa-scanner-dashboard .
+```
+
+### 2. Run the Web Dashboard Container
+
+Run the web dashboard as a daemonized container. You must pass your FOFA secrets as environment variables.
+
+```bash
+docker run -d \
+  --name fofa-dashboard \
+  -p 8080:8080 \
+  -e FOFA_EMAIL="your_fofa_email@example.com" \
+  -e FOFA_KEY="your_fofa_api_key" \
+  -v $(pwd)/scans.db:/app/scans.db \
+  fofa-scanner-dashboard
+```
+**Explanation:**
+*   `-d`: Runs the container in detached mode.
+*   `--name fofa-dashboard`: Assigns a name to the container.
+*   `-p 8080:8080`: Maps port 8080 on your host to port 8080 in the container.
+*   `-e FOFA_EMAIL=...`: Sets the FOFA_EMAIL environment variable inside the container.
+*   `-e FOFA_KEY=...`: Sets the FOFA_KEY environment variable inside the container.
+*   `-v $(pwd)/scans.db:/app/scans.db`: **(Important)** Mounts the `scans.db` file from your host into the container. This ensures the database persists even if the container is removed and allows the scanner (running outside the container) to write to it.
+
+You can now access the dashboard at `http://<your_server_ip>:8080`.
+
+### 3. Automated Scanning with Cron
+
+The scanner script should be run periodically from the host machine using a scheduler like `cron`. The scanner will write to the `scans.db` file, and the running Docker container will read from it.
+
+1.  Make sure `run_scanner.sh` is executable: `chmod +x run_scanner.sh`.
+2.  Edit your crontab: `crontab -e`.
+3.  Add a line to schedule the job. For example, to run the scan every day at 3 AM:
+    ```crontab
+    0 3 * * * /path/to/your/project/run_scanner.sh >> /path/to/your/project/scanner.log 2>&1
     ```
-3.  Open your web browser and navigate to `http://127.0.0.1:8080`.
-
-You will see a dashboard with a table of all previous scan results.
-
-### Logging
-
-The logging level and format can be customized in the `logging` section of the `config.yaml` file. By default, it logs `INFO` level messages and above in JSON format.
+    **Remember to replace `/path/to/your/project/` with the actual absolute path to the `run_scanner.sh` script.**

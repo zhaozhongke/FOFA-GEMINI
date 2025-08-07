@@ -4,3 +4,4 @@ PyYAML
 backoff
 requests
 Flask
+gunicorn

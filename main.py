@@ -2,6 +2,7 @@ import asyncio
 import base64
 import logging
 import logging.config
+import os
 import re
 import sqlite3
 from collections import Counter
@@ -54,13 +55,14 @@ class FofaClient:
     """A client to interact with the FOFA API."""
     def __init__(self, config: Dict[str, Any]):
         self.logger = logging.getLogger(__name__)
-        self.email = config.get('email')
-        self.key = config.get('key')
+        # Prioritize environment variables for secrets, fall back to config file
+        self.email = os.environ.get('FOFA_EMAIL') or config.get('email')
+        self.key = os.environ.get('FOFA_KEY') or config.get('key')
         self.query = config.get('query')
         self.page_size = config.get('page_size', 100)
 
-        if not self.email or not self.key:
-            self.logger.critical("FOFA email or key not found in config. Exiting.")
+        if not self.email or not self.key or "your_email" in self.email or "your_fofa_api_key" in self.key:
+            self.logger.critical("FOFA email or key is not configured. Please set FOFA_EMAIL and FOFA_KEY environment variables or update config.yaml. Exiting.")
             exit(1)
 
         self.client = fofa.Client(self.email, self.key)
