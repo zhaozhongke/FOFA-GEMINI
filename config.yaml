@@ -1,0 +1,49 @@
+# Configuration for the FOFA Gemini Key Scanner
+
+fofa:
+  # IMPORTANT: Replace with your FOFA credentials
+  email: "your_email@example.com"
+  key: "your_fofa_api_key"
+
+  # The FOFA query to execute. Must be Base64 encoded in the API call.
+  query: 'body="AIzaSy"'
+
+  # Number of results to fetch per page from FOFA.
+  # Note: FOFA may have its own limits for complex queries.
+  page_size: 100
+
+validator:
+  # Number of concurrent tasks to run for validating keys.
+  concurrency: 20
+
+  # Configuration for the exponential backoff retry mechanism.
+  backoff:
+    max_tries: 5
+    # The initial delay for backoff in seconds.
+    initial_delay: 1
+    # The maximum delay for backoff in seconds.
+    max_delay: 60
+
+# Configuration for the Python logging module.
+# Outputs structured JSON logs to standard output.
+logging:
+  version: 1
+  disable_existing_loggers: false
+  formatters:
+    json:
+      # Using a class from a custom module might be better for real JSON,
+      # but for this exercise, a simple formatted string is fine.
+      # A real implementation might use 'pythonjsonlogger.jsonlogger.JsonFormatter'.
+      format: '{"timestamp": "%(asctime)s", "level": "%(levelname)s", "name": "%(name)s", "message": "%(message)s"}'
+  handlers:
+    console:
+      class: logging.StreamHandler
+      formatter: json
+      stream: ext://sys.stdout
+  root:
+    level: INFO
+    handlers: [console]
+  loggers:
+    # Set specific log levels for noisy libraries if needed
+    backoff:
+      level: WARNING
